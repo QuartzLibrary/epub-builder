@@ -39,6 +39,8 @@ struct Metadata {
     pub subject: Vec<String>,
     pub license: Option<String>,
     pub date_published: Option<chrono::DateTime<chrono::Utc>>,
+    pub last_modified: Option<chrono::DateTime<chrono::Utc>>,
+    pub uuid: Option<uuid::Uuid>,
 }
 
 impl Metadata {
@@ -54,6 +56,8 @@ impl Metadata {
             subject: vec![],
             license: None,
             date_published: None,
+            last_modified: None,
+            uuid: None,
         }
     }
 }
@@ -208,11 +212,23 @@ impl<Z: Zip> EpubBuilder<Z> {
     }
 
     /// Sets the publication date of the EPUB
-    /// 
-    /// This value is part of the metadata. If this function is not called, the time at the
-    /// moment of generation will be used instead.
+    ///
+    /// This value is part of the metadata.
     pub fn set_publication_date(&mut self, date_published: chrono::DateTime<chrono::Utc>) {
         self.metadata.date_published = Some(date_published);
+    }
+    /// Sets the last modified date of the EPUB
+    ///
+    /// This value is part of the metadata. If this function is not called, the time at the
+    /// moment of generation will be used instead.
+    pub fn set_last_modified_date(&mut self, last_modified: chrono::DateTime<chrono::Utc>) {
+        self.metadata.last_modified = Some(last_modified);
+    }
+    /// Sets the uuid used for the epub
+    ///
+    /// This is useful for reproducibly generating epubs.
+    pub fn set_uuid(&mut self, uuid: uuid::Uuid) {
+        self.metadata.uuid = Some(uuid);
     }
 
     /// Sets stylesheet of the EPUB.
@@ -409,9 +425,17 @@ impl<Z: Zip> EpubBuilder<Z> {
         if let Some(ref rights) = self.metadata.license {
             optional.push(format!("<dc:rights>{}</dc:rights>", rights));
         }
-        let date = chrono::Utc::now().format("%Y-%m-%dT%H:%M:%SZ");
-        let date_published = self.metadata.date_published.map(|date| date.format("%Y-%m-%dT%H:%M:%SZ"));
-        let uuid = uuid::fmt::Urn::from_uuid(uuid::Uuid::new_v4()).to_string();
+        let date = self
+            .metadata
+            .last_modified
+            .unwrap_or_else(chrono::Utc::now)
+            .format("%Y-%m-%dT%H:%M:%SZ");
+        let date_published = self
+            .metadata
+            .date_published
+            .map(|date| date.format("%Y-%m-%dT%H:%M:%SZ"));
+        let uuid = uuid::fmt::Urn::from_uuid(self.metadata.uuid.unwrap_or_else(uuid::Uuid::new_v4))
+            .to_string();
 
         let mut items: Vec<String> = Vec::new();
         let mut itemrefs: Vec<String> = Vec::new();
@@ -504,7 +528,7 @@ impl<Z: Zip> EpubBuilder<Z> {
             } else {
                 builder = builder.insert_bool("date_published", false);
             }
-                
+
             builder.build()
         };
 
